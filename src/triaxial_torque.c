@@ -98,6 +98,7 @@
 #include "reboundx.h"
 
 // linearly interpolates position of particle p at time dt
+// add backward interpolation
 static void rebx_interpolate_xyz(struct reb_particle* p, double xyz[3], const double dt){
     xyz[0] = p->x + (dt*p->vx);
     xyz[1] = p->y + (dt*p->vy);
@@ -140,7 +141,7 @@ static void rebx_dijk_dt(double ijk_ijk[3][3], double omega_ijk[3], double dijk_
 }
 
 // calculates the triaxial torque from all other bodies on the 'index'th particle
-static void rebx_calc_torques(struct reb_simulation* const sim, int index, double M_ijk[3], double I_ijk[3], double ijk_xyz[3][3], const double dt){
+static void rebx_calc_torques(struct reb_simulation* const sim, int index, double M_ijk[3], double I_ijk[3], double ijk_xyz[3][3], const double dt, const double sim_dt){
     
     struct reb_particle* p = &sim->particles[index];
     struct reb_particle* torquer;
@@ -155,7 +156,7 @@ static void rebx_calc_torques(struct reb_simulation* const sim, int index, doubl
     double r_dot_k;
     double prefac;
 
-    rebx_interpolate_xyz(p,p_xyz,dt);
+    rebx_interpolate_xyz(p,p_xyz,dt-sim_dt);
 
     const int _N_real = sim->N - sim->N_var;
 	for(int i=0; i<_N_real; i++){
@@ -163,7 +164,7 @@ static void rebx_calc_torques(struct reb_simulation* const sim, int index, doubl
             continue;
         }
         torquer = &sim->particles[i];
-        rebx_interpolate_xyz(torquer,torquer_xyz,dt);
+        rebx_interpolate_xyz(torquer,torquer_xyz,dt-sim_dt);
         rx = p_xyz[0] - torquer_xyz[0];
         ry = p_xyz[1] - torquer_xyz[1];
         rz = p_xyz[2] - torquer_xyz[2];
@@ -246,7 +247,7 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torq
 
         // Calcs
         if (calc_torque_bool != 0) {
-            rebx_calc_torques(sim,index,rk_M_ijk[i],I_ijk,rk_ijk_xyz[i],rk_dts[i]); // [DEBUG]
+            rebx_calc_torques(sim,index,rk_M_ijk[i],I_ijk,rk_ijk_xyz[i],rk_dts[i],dt); // [DEBUG]
         }
         rebx_domega_dt(rk_omega_ijk[i],rk_M_ijk[i],I_ijk,rk_domega_dts[i]);
         rebx_dijk_dt(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts[i]);
@@ -449,7 +450,7 @@ void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator
                 return;
             }
             // extra timestep with no torque
-            rebx_update_spin_ijk(sim,0,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,dt);
+            // rebx_update_spin_ijk(sim,0,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,dt); // [DEBUG]
         }
         
         rebx_update_spin_ijk(sim,1,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,dt);
