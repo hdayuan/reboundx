@@ -75,6 +75,9 @@
  * tt_si (double)                  Yes         i component of spin unit vector
  * tt_sj (double)                  Yes         j component of spin unit vector
  * tt_sk (double)                  Yes         k component of spin unit vector
+ * tt_Q  (double)                  Yes         tidal Q factor
+ * tt_k2 (double)                  Yes         2nd degree Love number
+ * tt_R  (double)                  Yes         mean radius
  * ============================ =========== ==================================================================
  * 
  * Parameter reuqirements:
@@ -90,6 +93,10 @@
 - only using first derivative calc
 */
 
+/* CHANGES:
+- calling dijk_dt_acc instead of old one
+*/
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -97,12 +104,19 @@
 #include "rebound.h"
 #include "reboundx.h"
 
-// linearly interpolates position of particle p at time dt
-// add backward interpolation
-static void rebx_interpolate_xyz(struct reb_particle* p, double xyz[3], const double dt){
-    xyz[0] = p->x + (dt*p->vx);
-    xyz[1] = p->y + (dt*p->vy);
-    xyz[2] = p->z + (dt*p->vz);
+// global variables
+double PI = 3.14159265358979323846;
+
+// computes and returns the dot product between vectors u and v
+static double rebx_dot_prod(double u[3], double v[3]) {
+    return u[0]*v[0] + u[1]*v[1] + u[2]*v[2];
+}
+
+// computes cross product between vectors u and v, and puts result in w
+static void rebx_cross_prod(double u[3], double v[3], double w[3]) {
+    w[0] = u[1]*v[2] - u[2]*v[1];
+    w[1] = u[2]*v[0] - u[0]*v[2];
+    w[2] = u[0]*v[1] - u[1]*v[0];
 }
 
 // convert vector ijk to xyz (same vector in xyz basis), given ijk_xyz
@@ -112,8 +126,42 @@ static void rebx_ijk_to_xyz(double ijk[3], double xyz[3], double ijk_xyz[3][3]){
     }
 }
 
+// linearly interpolates position of particle p at time dt
+static void rebx_interpolate_xyz(struct reb_particle* p, double xyz[3], double dt){
+    xyz[0] = p->x + (dt*p->vx);
+    xyz[1] = p->y + (dt*p->vy);
+    xyz[2] = p->z + (dt*p->vz);
+}
+
+// interpolate position assuming orbit around stationary primary
+// orbit assumed to be near circular??
+static void rebx_interpolate_xyz_acc(double sim_G, struct reb_particle* p, struct reb_particle* primary, double xyz[3], double dt, double dtheta){
+    if (p == primary) {
+        xyz[0] = p->x + (dt*p->vx);
+        xyz[1] = p->y + (dt*p->vy);
+        xyz[2] = p->z + (dt*p->vz);
+        return;
+    }
+
+    struct reb_orbit o = reb_tools_particle_to_orbit(sim_G, *p, *primary);
+
+    double r_xyz[3] = {p->x - primary->x,p->y - primary->y,p->z - primary->z};
+    double v_xyz[3] = {p->vx - primary->vx, p->vy - primary->vy, p->vz - primary->vz};
+    double r = sqrt(r_xyz[0]*r_xyz[0] + r_xyz[1]*r_xyz[1] + r_xyz[2]*r_xyz[2]);
+    double v = sqrt(v_xyz[0]*v_xyz[0] + v_xyz[1]*v_xyz[1] + v_xyz[2]*v_xyz[2]);
+
+    dtheta += (dt / o.P) * 2*PI;
+    double cos_dtheta = cos(dtheta);
+    double sin_dtheta = sin(dtheta);
+
+    xyz[0] = p->x + (dt*primary->vx) + r*sin_dtheta*v_xyz[0]/v - (1-cos_dtheta)*r_xyz[0];
+    xyz[1] = p->y + (dt*primary->vy) + r*sin_dtheta*v_xyz[1]/v - (1-cos_dtheta)*r_xyz[1];
+    xyz[2] = p->z + (dt*primary->vz) + r*sin_dtheta*v_xyz[2]/v - (1-cos_dtheta)*r_xyz[2];
+    // printf("a=%f e=%f\n", o.a, o.e);
+}
+
 // computes time-derivative of spin vector omega_i,omega_j,omega_k using torque vector Mi, Mj, Mk according to Euler's equations
-static void rebx_domega_dt(double omega_ijk[3], double M_ijk[3], double I_ijk[3], double domega_dts[3]){
+static void rebx_domega_dt(double omega_ijk[3], double M_ijk[3], const double I_ijk[3], double domega_dts[3]){
     domega_dts[0] = (M_ijk[0] + (I_ijk[1]-I_ijk[2])*omega_ijk[1]*omega_ijk[2]) / I_ijk[0];
     domega_dts[1] = (M_ijk[1] + (I_ijk[2]-I_ijk[0])*omega_ijk[2]*omega_ijk[0]) / I_ijk[1];
     domega_dts[2] = (M_ijk[2] + (I_ijk[0]-I_ijk[1])*omega_ijk[0]*omega_ijk[1]) / I_ijk[2];
@@ -140,23 +188,46 @@ static void rebx_dijk_dt(double ijk_ijk[3][3], double omega_ijk[3], double dijk_
     dijk_dts[2][2] = omega_ijk[0]*ijk_ijk[2][1] - omega_ijk[1]*ijk_ijk[2][0];
 }
 
+// computes time-derivative of vectors i,j,k (components in old ijk basis)
+static void rebx_dijk_dt_acc(double ijk_ijk[3][3], double omega_ijk[3], double dijk_dts[3][3], double sim_dt){
+    double omega = sqrt(omega_ijk[0]*omega_ijk[0] + omega_ijk[1]*omega_ijk[1] + omega_ijk[2]*omega_ijk[2]);
+    double s_ijk[3] = {omega_ijk[0]/omega, omega_ijk[1]/omega, omega_ijk[2]/omega};
+    double dtheta = omega*sim_dt;
+    double sin_dtheta = sin(dtheta);
+    double cos_dtheta = sqrt(1 - sin_dtheta*sin_dtheta);
+    
+    // di/dt
+    dijk_dts[0][0] = (sin_dtheta*(s_ijk[1]*ijk_ijk[0][2] - s_ijk[2]*ijk_ijk[0][1]) - (1-cos_dtheta)*ijk_ijk[0][0])/sim_dt;
+    dijk_dts[0][1] = (sin_dtheta*(s_ijk[2]*ijk_ijk[0][0] - s_ijk[0]*ijk_ijk[0][2]) - (1-cos_dtheta)*ijk_ijk[0][1])/sim_dt;
+    dijk_dts[0][2] = (sin_dtheta*(s_ijk[0]*ijk_ijk[0][1] - s_ijk[1]*ijk_ijk[0][0]) - (1-cos_dtheta)*ijk_ijk[0][2])/sim_dt;
+
+    // dj/dt
+    dijk_dts[1][0] = (sin_dtheta*(s_ijk[1]*ijk_ijk[1][2] - s_ijk[2]*ijk_ijk[1][1]) - (1-cos_dtheta)*ijk_ijk[1][0])/sim_dt;
+    dijk_dts[1][1] = (sin_dtheta*(s_ijk[2]*ijk_ijk[1][0] - s_ijk[0]*ijk_ijk[1][2]) - (1-cos_dtheta)*ijk_ijk[1][1])/sim_dt;
+    dijk_dts[1][2] = (sin_dtheta*(s_ijk[0]*ijk_ijk[1][1] - s_ijk[1]*ijk_ijk[1][0]) - (1-cos_dtheta)*ijk_ijk[1][2])/sim_dt;
+
+    // dk/dt
+    dijk_dts[2][0] = (sin_dtheta*(s_ijk[1]*ijk_ijk[2][2] - s_ijk[2]*ijk_ijk[2][1]) - (1-cos_dtheta)*ijk_ijk[2][0])/sim_dt;
+    dijk_dts[2][1] = (sin_dtheta*(s_ijk[2]*ijk_ijk[2][0] - s_ijk[0]*ijk_ijk[2][2]) - (1-cos_dtheta)*ijk_ijk[2][1])/sim_dt;
+    dijk_dts[2][2] = (sin_dtheta*(s_ijk[0]*ijk_ijk[2][1] - s_ijk[1]*ijk_ijk[2][0]) - (1-cos_dtheta)*ijk_ijk[2][2])/sim_dt;
+}
+
 // calculates the triaxial torque from all other bodies on the 'index'th particle
-static void rebx_calc_torques(struct reb_simulation* const sim, int index, double M_ijk[3], double I_ijk[3], double ijk_xyz[3][3], const double dt, const double sim_dt){
+static void rebx_calc_triax_torque(struct reb_simulation* const sim, int index, double M_ijk[3], const double I_ijk[3], double ijk_xyz[3][3], const double dt, const double sim_dt){
     
     struct reb_particle* p = &sim->particles[index];
     struct reb_particle* torquer;
     double p_xyz[3];
     double torquer_xyz[3];
-    double rx;
-    double ry;
-    double rz;
+    double r_xyz[3];
     double r;
     double r_dot_i;
     double r_dot_j;
     double r_dot_k;
     double prefac;
 
-    rebx_interpolate_xyz(p,p_xyz,dt-sim_dt);
+    // rebx_interpolate_xyz(p,p_xyz,dt-sim_dt);
+    rebx_interpolate_xyz_acc(sim->G, p, &sim->particles[0],p_xyz,dt-sim_dt,0);
 
     const int _N_real = sim->N - sim->N_var;
 	for(int i=0; i<_N_real; i++){
@@ -164,16 +235,17 @@ static void rebx_calc_torques(struct reb_simulation* const sim, int index, doubl
             continue;
         }
         torquer = &sim->particles[i];
-        rebx_interpolate_xyz(torquer,torquer_xyz,dt-sim_dt);
-        rx = p_xyz[0] - torquer_xyz[0];
-        ry = p_xyz[1] - torquer_xyz[1];
-        rz = p_xyz[2] - torquer_xyz[2];
-        r = sqrt(rx*rx + ry*ry + rz*rz);
+        // rebx_interpolate_xyz(torquer,torquer_xyz,dt-sim_dt);
+        rebx_interpolate_xyz_acc(sim->G, torquer, &sim->particles[0],torquer_xyz,dt-sim_dt,0);
+        r_xyz[0] = p_xyz[0] - torquer_xyz[0];
+        r_xyz[1] = p_xyz[1] - torquer_xyz[1];
+        r_xyz[2] = p_xyz[2] - torquer_xyz[2];
+        r = sqrt(rebx_dot_prod(r_xyz, r_xyz));
         prefac = 3 * sim->G * torquer->m / pow(r,5);
 
-        r_dot_i = rx*ijk_xyz[0][0] + ry*ijk_xyz[0][1] + rz*ijk_xyz[0][2];
-        r_dot_j = rx*ijk_xyz[1][0] + ry*ijk_xyz[1][1] + rz*ijk_xyz[1][2];
-        r_dot_k = rx*ijk_xyz[2][0] + ry*ijk_xyz[2][1] + rz*ijk_xyz[2][2];
+        r_dot_i = rebx_dot_prod(r_xyz,ijk_xyz[0]);
+        r_dot_j = rebx_dot_prod(r_xyz,ijk_xyz[1]);
+        r_dot_k = rebx_dot_prod(r_xyz,ijk_xyz[2]);
 
         M_ijk[0] += prefac*(I_ijk[2]-I_ijk[1])*r_dot_j*r_dot_k;
         M_ijk[1] += prefac*(I_ijk[0]-I_ijk[2])*r_dot_k*r_dot_i;
@@ -181,17 +253,72 @@ static void rebx_calc_torques(struct reb_simulation* const sim, int index, doubl
     }
 }
 
+// calculates the tidal torque from host star on the 'index'th particle
+// assumes host star is at index 0
+static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, double M_ijk[3], double omega_ijk[3], double ijk_xyz[3][3], const double Q, const double k2, 
+    const double R, double dt, const double sim_dt){
+
+    // if primary, ignore
+    if (index == 0) {
+        return;
+    }
+
+    double theta_lag = -1/(2*Q);
+    struct reb_particle* p = &sim->particles[index];
+    struct reb_particle* primary = &sim->particles[0];
+    double lag_p_xyz[3];
+    double lag_primary_xyz[3];
+
+    double r_xyz[3];
+    double r_ijk[3];
+    double r;
+    double rho_xyz[3];
+    double rho_ijk[3];
+    double rho;
+    double prefac;
+    double rho_cross_r[3];
+
+    rebx_interpolate_xyz_acc(sim->G,p,primary,lag_p_xyz,dt-sim_dt,theta_lag);
+    rebx_interpolate_xyz_acc(sim->G,primary,primary,lag_primary_xyz,dt-sim_dt,0);
+
+    r_xyz[0] = p->x - primary->x;
+    r_xyz[1] = p->y - primary->y;
+    r_xyz[2] = p->z - primary->z;
+
+    // interpolate based on timestep
+
+    r = sqrt(rebx_dot_prod(r_xyz,r_xyz));
+
+    rho_xyz[0] = lag_p_xyz[0] - lag_primary_xyz[0];
+    rho_xyz[1] = lag_p_xyz[1] - lag_primary_xyz[1];
+    rho_xyz[2] = lag_p_xyz[2] - lag_primary_xyz[2];
+
+    rho = sqrt(rebx_dot_prod(rho_xyz,rho_xyz));
+    
+    r_ijk[0] = rebx_dot_prod(r_xyz,ijk_xyz[0]);
+    r_ijk[1] = rebx_dot_prod(r_xyz,ijk_xyz[1]);
+    r_ijk[2] = rebx_dot_prod(r_xyz,ijk_xyz[2]);
+
+    rho_ijk[0] = rebx_dot_prod(rho_xyz,ijk_xyz[0]);
+    rho_ijk[1] = rebx_dot_prod(rho_xyz,ijk_xyz[1]);
+    rho_ijk[2] = rebx_dot_prod(rho_xyz,ijk_xyz[2]);
+
+    prefac = 3*k2*sim->G*primary->m*primary->m*pow(R,5)*rebx_dot_prod(r_ijk,rho_ijk) / (pow(rho,2)*pow(r,8));
+
+    rebx_cross_prod(rho_ijk,r_ijk,rho_cross_r);
+    M_ijk[0] += prefac*rho_cross_r[0];
+    M_ijk[1] += prefac*rho_cross_r[1];
+    M_ijk[2] += prefac*rho_cross_r[2];
+}
+
 /* updates spin vector, omega, and ijk in lockstep using 4th order Runge Kutta.
 If calc_torque_bool = 0, torque NOT calculated, otherwise torque calculated */
 static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torque_bool, int index, double* const ix, double* const iy, double* const iz, 
-    double* const jx, double* const jy, double* const jz, double* const kx, double* const ky, double* const kz, double* const si, 
-    double* const sj, double* const sk, double* const omega, const double Ii, const double Ij, const double Ik, const double dt){
+    double* const jx, double* const jy, double* const jz, double* const kx, double* const ky, double* const kz, double* const si, double* const sj,
+    double* const sk, double* const omega, const double Ii, const double Ij, const double Ik, const double Q, const double k2, const double R, const double dt){
 
     // Array for principal moments
-    double I_ijk[3];
-    I_ijk[0] = Ii;
-    I_ijk[1] = Ij;
-    I_ijk[2] = Ik;
+    const double I_ijk[3] = {Ii,Ij,Ik};
 
     // Declare matrices for all R-K calculations
     double rk_M_ijk[4][3] = {}; // ijk components of torque on body, Needs all values initialized to zero because multiple functions add to the values
@@ -247,16 +374,18 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torq
 
         // Calcs
         if (calc_torque_bool != 0) {
-            rebx_calc_torques(sim,index,rk_M_ijk[i],I_ijk,rk_ijk_xyz[i],rk_dts[i],dt); // [DEBUG]
+            rebx_calc_triax_torque(sim,index,rk_M_ijk[i],I_ijk,rk_ijk_xyz[i],rk_dts[i],dt); // [DEBUG]
+            // rebx_calc_tidal_torque(sim,index,rk_M_ijk[i],rk_omega_ijk[i],rk_ijk_xyz[i],Q,k2,R,rk_dts[i],dt);
         }
         rebx_domega_dt(rk_omega_ijk[i],rk_M_ijk[i],I_ijk,rk_domega_dts[i]);
-        rebx_dijk_dt(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts[i]);
+        rebx_dijk_dt_acc(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts[i],dt);
+        // rebx_dijk_dt(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts[i]);
     }
     
     /****************************************************************************************/
     /****************************************************************************************/
     // // First Runge-Kutta calculations
-    // rebx_calc_torques(sim,index,M_ijk[0],I_ijk,rk_ijk_xyz[0],0.0);
+    // rebx_calc_triax_torque(sim,index,M_ijk[0],I_ijk,rk_ijk_xyz[0],0.0);
     // rebx_domega_dt(rk_omega_ijk[0],rk_M_ijk[0],I_ijk,rk_domega_dts[0]);
     // rebx_dijk_dt(rk_ijk_ijk[0],rk_omega_ijk[0],rk_dijk_dts[0]);
 
@@ -270,7 +399,7 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torq
     // }
 
     // // Second RK calcs
-    // rebx_calc_torques(sim,index,M_ijk[1],I_ijk,rk_ijk_xyz[1],0.5*dt);
+    // rebx_calc_triax_torque(sim,index,M_ijk[1],I_ijk,rk_ijk_xyz[1],0.5*dt);
     // rebx_domega_dt(rk_omega_ijk[1],rk_M_ijk[1],I_ijk,rk_domega_dts[1]);
     // rebx_dijk_dt(rk_ijk_ijk[1],rk_omega_ijk[1],rk_dijk_dts[1]);
 
@@ -443,6 +572,18 @@ void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator
         if (sk == NULL) {
             continue;
         }
+        const double* const Q = rebx_get_param(sim->extras, p->ap, "tt_Q");
+        if (Q == NULL) {
+            continue;
+        }
+        const double* const k2 = rebx_get_param(sim->extras, p->ap, "tt_k2");
+        if (k2 == NULL) {
+            continue;
+        }
+        const double* const R = rebx_get_param(sim->extras, p->ap, "tt_R");
+        if (R == NULL) {
+            continue;
+        }
 
         // check validity of parameters if first timestep
         if (sim->t <= dt){
@@ -453,6 +594,6 @@ void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator
             // rebx_update_spin_ijk(sim,0,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,dt); // [DEBUG]
         }
         
-        rebx_update_spin_ijk(sim,1,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,dt);
+        rebx_update_spin_ijk(sim,1,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,*Q,*k2,*R,dt);
     }
 }

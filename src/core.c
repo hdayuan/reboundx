@@ -140,6 +140,9 @@ void rebx_register_default_params(struct rebx_extras* rebx){
     rebx_register_param(rebx, "tt_si", REBX_TYPE_DOUBLE);
     rebx_register_param(rebx, "tt_sj", REBX_TYPE_DOUBLE);
     rebx_register_param(rebx, "tt_sk", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "tt_Q", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "tt_k2", REBX_TYPE_DOUBLE);
+    rebx_register_param(rebx, "tt_R", REBX_TYPE_DOUBLE);
 }
 
 void rebx_register_param(struct rebx_extras* const rebx, const char* name, enum rebx_param_type type){
