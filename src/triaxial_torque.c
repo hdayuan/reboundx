@@ -213,7 +213,7 @@ static void rebx_dijk_dt_acc(double ijk_ijk[3][3], double omega_ijk[3], double d
 }
 
 // calculates the triaxial torque from all other bodies on the 'index'th particle
-static void rebx_calc_triax_torque(struct reb_simulation* const sim, int index, double M_ijk[3], const double I_ijk[3], double ijk_xyz[3][3], const double dt, const double sim_dt){
+static void rebx_calc_triax_torque(struct reb_simulation* const sim, int index, double M_ijk[3], const double I_ijk[3], double ijk_xyz[3][3], double dt, const double sim_dt){
     
     struct reb_particle* p = &sim->particles[index];
     struct reb_particle* torquer;
@@ -285,7 +285,7 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     r_xyz[1] = p->y - primary->y;
     r_xyz[2] = p->z - primary->z;
 
-    // interpolate based on timestep
+    // interpolate based on timestep !!!
 
     r = sqrt(rebx_dot_prod(r_xyz,r_xyz));
 
@@ -378,6 +378,7 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torq
             // rebx_calc_tidal_torque(sim,index,rk_M_ijk[i],rk_omega_ijk[i],rk_ijk_xyz[i],Q,k2,R,rk_dts[i],dt);
         }
         rebx_domega_dt(rk_omega_ijk[i],rk_M_ijk[i],I_ijk,rk_domega_dts[i]);
+
         rebx_dijk_dt_acc(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts[i],dt);
         // rebx_dijk_dt(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts[i]);
     }
