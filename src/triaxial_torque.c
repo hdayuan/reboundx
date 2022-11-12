@@ -136,7 +136,7 @@ static void rebx_interpolate_xyz(struct reb_particle* p, double xyz[3], double d
 // interpolate position assuming orbit around stationary primary
 // orbit assumed to be near circular??
 // *** when calling with p = primary, dtheta not used, make sure to incorporate additional time offset into dt ***
-static void rebx_interpolate_xyz_acc(double sim_G, struct reb_particle* p, struct reb_particle* primary, double xyz[3], double dt, double dtheta){
+static void rebx_interpolate_xyz_acc(double sim_G, struct reb_particle* p, struct reb_particle* primary, double xyz[3], double dt){
     
     // dtheta not used if p == primary
     if (p == primary) {
@@ -153,7 +153,7 @@ static void rebx_interpolate_xyz_acc(double sim_G, struct reb_particle* p, struc
     double r = sqrt(r_xyz[0]*r_xyz[0] + r_xyz[1]*r_xyz[1] + r_xyz[2]*r_xyz[2]);
     double v = sqrt(v_xyz[0]*v_xyz[0] + v_xyz[1]*v_xyz[1] + v_xyz[2]*v_xyz[2]);
 
-    dtheta += (dt / o.P) * 2*PI;
+    double dtheta = (dt / o.P) * 2*PI;
     double cos_dtheta = cos(dtheta);
     double sin_dtheta = sin(dtheta);
 
@@ -230,7 +230,7 @@ static void rebx_calc_triax_torque(struct reb_simulation* const sim, int index, 
     double prefac;
 
     // rebx_interpolate_xyz(p,p_xyz,dt-sim_dt);
-    rebx_interpolate_xyz_acc(sim->G, p, &sim->particles[0],p_xyz,dt-sim_dt,0);
+    rebx_interpolate_xyz_acc(sim->G, p, &sim->particles[0],p_xyz,dt-sim_dt);
 
     const int _N_real = sim->N - sim->N_var;
 	for(int i=0; i<_N_real; i++){
@@ -239,7 +239,7 @@ static void rebx_calc_triax_torque(struct reb_simulation* const sim, int index, 
         }
         torquer = &sim->particles[i];
         // rebx_interpolate_xyz(torquer,torquer_xyz,dt-sim_dt);
-        rebx_interpolate_xyz_acc(sim->G, torquer, &sim->particles[0],torquer_xyz,dt-sim_dt,0);
+        rebx_interpolate_xyz_acc(sim->G, torquer, &sim->particles[0],torquer_xyz,dt-sim_dt);
         r_xyz[0] = p_xyz[0] - torquer_xyz[0];
         r_xyz[1] = p_xyz[1] - torquer_xyz[1];
         r_xyz[2] = p_xyz[2] - torquer_xyz[2];
@@ -286,10 +286,10 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     struct reb_orbit o = reb_tools_particle_to_orbit(sim->G, *p, *primary);
     double extra_dt = theta_lag / o.n; // for calculating lagged position of primary below with interpolation
 
-    rebx_interpolate_xyz_acc(sim->G,p,primary,lag_p_xyz,dt-sim_dt,theta_lag);
-    rebx_interpolate_xyz_acc(sim->G,primary,primary,lag_primary_xyz,dt-sim_dt+extra_dt,theta_lag);
-    rebx_interpolate_xyz_acc(sim->G,p,primary,p_xyz,dt-sim_dt,0);
-    rebx_interpolate_xyz_acc(sim->G,primary,primary,primary_xyz,dt-sim_dt,0);
+    rebx_interpolate_xyz_acc(sim->G,p,primary,lag_p_xyz,dt-sim_dt+extra_dt);
+    rebx_interpolate_xyz_acc(sim->G,primary,primary,lag_primary_xyz,dt-sim_dt+extra_dt);
+    rebx_interpolate_xyz_acc(sim->G,p,primary,p_xyz,dt-sim_dt);
+    rebx_interpolate_xyz_acc(sim->G,primary,primary,primary_xyz,dt-sim_dt);
 
     r_xyz[0] = p_xyz[0] - primary_xyz[0];
     r_xyz[1] = p_xyz[1] - primary_xyz[1];
