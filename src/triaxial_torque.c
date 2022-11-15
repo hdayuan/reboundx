@@ -83,12 +83,12 @@
  * Parameter reuqirements:
  * ============================
  * i, j, k, and s must be unit vectors (e.g. such that ix^2 + iy^2 + iz^2 = 1)
- * 
+ * i cross j = k
  */
 
 /* DEBUGGING CHANGES:
 - commented out torque calc
-- domega_dts all 0 
+- domega_dts_ijk all 0 
 - print statements
 - only using first derivative calc
 */
@@ -164,55 +164,51 @@ static void rebx_interpolate_xyz_acc(double sim_G, struct reb_particle* p, struc
 }
 
 // computes time-derivative of spin vector omega_i,omega_j,omega_k using torque vector Mi, Mj, Mk according to Euler's equations
-static void rebx_domega_dt(double omega_ijk[3], double M_ijk[3], const double I_ijk[3], double domega_dts[3]){
-    domega_dts[0] = (M_ijk[0] + (I_ijk[1]-I_ijk[2])*omega_ijk[1]*omega_ijk[2]) / I_ijk[0];
-    domega_dts[1] = (M_ijk[1] + (I_ijk[2]-I_ijk[0])*omega_ijk[2]*omega_ijk[0]) / I_ijk[1];
-    domega_dts[2] = (M_ijk[2] + (I_ijk[0]-I_ijk[1])*omega_ijk[0]*omega_ijk[1]) / I_ijk[2];
-    // domega_dts[0] = 0.0; // [DEBUG]
-    // domega_dts[1] = 0.0; // [DEBUG]
-    // domega_dts[2] = 0.0; // [DEBUG]
+static void rebx_domega_dt(double omega_ijk[3], double M_ijk[3], const double I_ijk[3], double domega_dts_ijk[3]){
+    domega_dts_ijk[0] = (M_ijk[0] + (I_ijk[1]-I_ijk[2])*omega_ijk[1]*omega_ijk[2]) / I_ijk[0];
+    domega_dts_ijk[1] = (M_ijk[1] + (I_ijk[2]-I_ijk[0])*omega_ijk[2]*omega_ijk[0]) / I_ijk[1];
+    domega_dts_ijk[2] = (M_ijk[2] + (I_ijk[0]-I_ijk[1])*omega_ijk[0]*omega_ijk[1]) / I_ijk[2];
+    // domega_dts_ijk[0] = 0.0; // [DEBUG]
+    // domega_dts_ijk[1] = 0.0; // [DEBUG]
+    // domega_dts_ijk[2] = 0.0; // [DEBUG]
 }
 
 // computes time-derivative of vectors i,j,k (components in old ijk basis)
-static void rebx_dijk_dt(double ijk_ijk[3][3], double omega_ijk[3], double dijk_dts[3][3]){
-    // di/dt
-    dijk_dts[0][0] = omega_ijk[1]*ijk_ijk[0][2] - omega_ijk[2]*ijk_ijk[0][1];
-    dijk_dts[0][1] = omega_ijk[2]*ijk_ijk[0][0] - omega_ijk[0]*ijk_ijk[0][2];
-    dijk_dts[0][2] = omega_ijk[0]*ijk_ijk[0][1] - omega_ijk[1]*ijk_ijk[0][0];
-
-    // dj/dt
-    dijk_dts[1][0] = omega_ijk[1]*ijk_ijk[1][2] - omega_ijk[2]*ijk_ijk[1][1];
-    dijk_dts[1][1] = omega_ijk[2]*ijk_ijk[1][0] - omega_ijk[0]*ijk_ijk[1][2];
-    dijk_dts[1][2] = omega_ijk[0]*ijk_ijk[1][1] - omega_ijk[1]*ijk_ijk[1][0];
-
-    // dk/dt
-    dijk_dts[2][0] = omega_ijk[1]*ijk_ijk[2][2] - omega_ijk[2]*ijk_ijk[2][1];
-    dijk_dts[2][1] = omega_ijk[2]*ijk_ijk[2][0] - omega_ijk[0]*ijk_ijk[2][2];
-    dijk_dts[2][2] = omega_ijk[0]*ijk_ijk[2][1] - omega_ijk[1]*ijk_ijk[2][0];
+static void rebx_dijk_dt(double ijk_ijk[3][3], double omega_ijk[3], double dijk_dts_ijk[3][3]){
+    rebx_cross_prod(omega_ijk,ijk_ijk[0],dijk_dts_ijk[0]); // di/dt
+    rebx_cross_prod(omega_ijk,ijk_ijk[1],dijk_dts_ijk[1]); // dj/dt
+    rebx_cross_prod(omega_ijk,ijk_ijk[2],dijk_dts_ijk[2]); // dk/dt
 }
 
 // computes time-derivative of vectors i,j,k (components in old ijk basis)
-static void rebx_dijk_dt_acc(double ijk_ijk[3][3], double omega_ijk[3], double dijk_dts[3][3], double sim_dt){
+static void rebx_dijk_dt_acc(double ijk_ijk[3][3], double omega_ijk[3], double dijk_dts_ijk[3][3], double sim_dt){
     double omega = sqrt(omega_ijk[0]*omega_ijk[0] + omega_ijk[1]*omega_ijk[1] + omega_ijk[2]*omega_ijk[2]);
     double s_ijk[3] = {omega_ijk[0]/omega, omega_ijk[1]/omega, omega_ijk[2]/omega};
     double dtheta = omega*sim_dt;
     double sin_dtheta = sin(dtheta);
     double cos_dtheta = sqrt(1 - sin_dtheta*sin_dtheta);
+    double s_cross_i[3];
+    double s_cross_j[3];
+    double s_cross_k[3];
+
+    rebx_cross_prod(s_ijk,ijk_ijk[0],s_cross_i);
+    rebx_cross_prod(s_ijk,ijk_ijk[1],s_cross_j);
+    rebx_cross_prod(s_ijk,ijk_ijk[2],s_cross_k);
     
     // di/dt
-    dijk_dts[0][0] = (sin_dtheta*(s_ijk[1]*ijk_ijk[0][2] - s_ijk[2]*ijk_ijk[0][1]) - (1-cos_dtheta)*ijk_ijk[0][0])/sim_dt;
-    dijk_dts[0][1] = (sin_dtheta*(s_ijk[2]*ijk_ijk[0][0] - s_ijk[0]*ijk_ijk[0][2]) - (1-cos_dtheta)*ijk_ijk[0][1])/sim_dt;
-    dijk_dts[0][2] = (sin_dtheta*(s_ijk[0]*ijk_ijk[0][1] - s_ijk[1]*ijk_ijk[0][0]) - (1-cos_dtheta)*ijk_ijk[0][2])/sim_dt;
+    dijk_dts_ijk[0][0] = (sin_dtheta*s_cross_i[0] - (1-cos_dtheta)*ijk_ijk[0][0])/sim_dt;
+    dijk_dts_ijk[0][1] = (sin_dtheta*s_cross_i[1] - (1-cos_dtheta)*ijk_ijk[0][1])/sim_dt;
+    dijk_dts_ijk[0][2] = (sin_dtheta*s_cross_i[2] - (1-cos_dtheta)*ijk_ijk[0][2])/sim_dt;
 
     // dj/dt
-    dijk_dts[1][0] = (sin_dtheta*(s_ijk[1]*ijk_ijk[1][2] - s_ijk[2]*ijk_ijk[1][1]) - (1-cos_dtheta)*ijk_ijk[1][0])/sim_dt;
-    dijk_dts[1][1] = (sin_dtheta*(s_ijk[2]*ijk_ijk[1][0] - s_ijk[0]*ijk_ijk[1][2]) - (1-cos_dtheta)*ijk_ijk[1][1])/sim_dt;
-    dijk_dts[1][2] = (sin_dtheta*(s_ijk[0]*ijk_ijk[1][1] - s_ijk[1]*ijk_ijk[1][0]) - (1-cos_dtheta)*ijk_ijk[1][2])/sim_dt;
+    dijk_dts_ijk[1][0] = (sin_dtheta*s_cross_j[0] - (1-cos_dtheta)*ijk_ijk[1][0])/sim_dt;
+    dijk_dts_ijk[1][1] = (sin_dtheta*s_cross_j[1] - (1-cos_dtheta)*ijk_ijk[1][1])/sim_dt;
+    dijk_dts_ijk[1][2] = (sin_dtheta*s_cross_j[2] - (1-cos_dtheta)*ijk_ijk[1][2])/sim_dt;
 
     // dk/dt
-    dijk_dts[2][0] = (sin_dtheta*(s_ijk[1]*ijk_ijk[2][2] - s_ijk[2]*ijk_ijk[2][1]) - (1-cos_dtheta)*ijk_ijk[2][0])/sim_dt;
-    dijk_dts[2][1] = (sin_dtheta*(s_ijk[2]*ijk_ijk[2][0] - s_ijk[0]*ijk_ijk[2][2]) - (1-cos_dtheta)*ijk_ijk[2][1])/sim_dt;
-    dijk_dts[2][2] = (sin_dtheta*(s_ijk[0]*ijk_ijk[2][1] - s_ijk[1]*ijk_ijk[2][0]) - (1-cos_dtheta)*ijk_ijk[2][2])/sim_dt;
+    dijk_dts_ijk[2][0] = (sin_dtheta*s_cross_k[0] - (1-cos_dtheta)*ijk_ijk[2][0])/sim_dt;
+    dijk_dts_ijk[2][1] = (sin_dtheta*s_cross_k[1] - (1-cos_dtheta)*ijk_ijk[2][1])/sim_dt;
+    dijk_dts_ijk[2][2] = (sin_dtheta*s_cross_k[2] - (1-cos_dtheta)*ijk_ijk[2][2])/sim_dt;
 }
 
 // calculates the triaxial torque from all other bodies on the 'index'th particle
@@ -337,8 +333,8 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torq
     double rk_omega_ijk[4][3]; // ijk components of spin vector (total omega vector)
     double rk_ijk_xyz[4][3][3]; // xyz components of each ijk vector
     double rk_ijk_ijk[4][3][3]; // components of each ijk vector in the old ijk basis
-    double rk_domega_dts[4][3]; // matrix for all calculations of domega/dt
-    double rk_dijk_dts[4][3][3]; // matrix for all calculations of d{ijk}/dt
+    double rk_domega_dts_ijk[4][3]; // matrix for all calculations of domega/dt in old ijk basis
+    double rk_dijk_dts_ijk[4][3][3]; // matrix for all calculations of d{ijk}/dt in old ijk basis
     /* second dimension: vector (i_hat,j_hat,k_hat)
     third dimension: component of vector (i,j,k) */
     double rk_dts[4] = {0.0, 0.5*dt, 0.5*dt, dt}; // array of sub-timesteps for each RK calculation
@@ -370,15 +366,14 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torq
     rk_ijk_ijk[0][2][1] = 0.0;
     rk_ijk_ijk[0][2][2] = 1.0;
 
-    /****************************************************************************************/
     // Runge-Kutta Calculations
     for (int i = 0; i < 4; i++) {
         // Pre-calcs, skip if first iteration
         if (i != 0) {
             for (int j=0; j < 3; j++) {
-                rk_omega_ijk[i][j] = rk_domega_dts[i-1][j]*rk_dts[i] + rk_omega_ijk[0][j];
+                rk_omega_ijk[i][j] = rk_domega_dts_ijk[i-1][j]*rk_dts[i] + rk_omega_ijk[0][j];
                 for (int k=0; k < 3; k++) {
-                    rk_ijk_ijk[i][j][k] = rk_dijk_dts[i-1][j][k]*rk_dts[i] + rk_ijk_ijk[0][j][k];
+                    rk_ijk_ijk[i][j][k] = rk_dijk_dts_ijk[i-1][j][k]*rk_dts[i] + rk_ijk_ijk[0][j][k];
                 }
                 rebx_ijk_to_xyz(rk_ijk_ijk[i][j],rk_ijk_xyz[i][j],rk_ijk_xyz[0]);
             }
@@ -389,71 +384,59 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torq
             rebx_calc_triax_torque(sim,index,rk_M_ijk[i],I_ijk,rk_ijk_xyz[i],rk_dts[i],dt); // [DEBUG]
             rebx_calc_tidal_torque(sim,index,rk_M_ijk[i],rk_omega_ijk[i],rk_ijk_xyz[i],Q,k2,R,rk_dts[i],dt);
         }
-        rebx_domega_dt(rk_omega_ijk[i],rk_M_ijk[i],I_ijk,rk_domega_dts[i]);
+        rebx_domega_dt(rk_omega_ijk[i],rk_M_ijk[i],I_ijk,rk_domega_dts_ijk[i]);
 
-        rebx_dijk_dt_acc(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts[i],dt);
-        // rebx_dijk_dt(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts[i]);
+        rebx_dijk_dt_acc(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts_ijk[i],dt);
+        // rebx_dijk_dt(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts_ijk[i]);
     }
     
-    // calculate domega, d{ijk}
-    double domega[3];
-    double dijk[3][3];
+    // calculate domega_ijk, d{ijk}
+    double domega_ijk[3]; // in old ijk basis
+    double dijk_ijk[3][3]; // in old ijk basis
     for (int i = 0; i < 3; i++){
-        // domega[i] = rk_domega_dts[0][i] * dt; // [DEBUG]
-        domega[i] = (rk_domega_dts[0][i] + 2*rk_domega_dts[1][i] + 2*rk_domega_dts[2][i] + rk_domega_dts[3][i]) * dt / 6;
+        // domega_ijk[i] = rk_domega_dts_ijk[0][i] * dt; // [DEBUG]
+        domega_ijk[i] = (rk_domega_dts_ijk[0][i] + 2*rk_domega_dts_ijk[1][i] + 2*rk_domega_dts_ijk[2][i] + rk_domega_dts_ijk[3][i]) * dt / 6;
         for (int j = 0; j < 3; j++){
-            // dijk[i][j] = rk_dijk_dts[0][i][j] * dt; // [DEBUG]
-            dijk[i][j] = (rk_dijk_dts[0][i][j] + 2*rk_dijk_dts[1][i][j] + 2*rk_dijk_dts[2][i][j] + rk_dijk_dts[3][i][j]) * dt / 6;
+            // dijk_ijk[i][j] = rk_dijk_dts_ijk[0][i][j] * dt; // [DEBUG]
+            dijk_ijk[i][j] = (rk_dijk_dts_ijk[0][i][j] + 2*rk_dijk_dts_ijk[1][i][j] + 2*rk_dijk_dts_ijk[2][i][j] + rk_dijk_dts_ijk[3][i][j]) * dt / 6;
         }
     }
 
-    // printf("%f\n", domega[0]); // [DEBUG]
-    // printf("%f\n", domega[1]); // [DEBUG]
-    // printf("%f\n", domega[2]); // [DEBUG]
+    // printf("%f\n", domega_ijk[0]); // [DEBUG]
+    // printf("%f\n", domega_ijk[1]); // [DEBUG]
+    // printf("%f\n", domega_ijk[2]); // [DEBUG]
 
-    double omega_i = rk_omega_ijk[0][0] + domega[0];
-    double omega_j = rk_omega_ijk[0][1] + domega[1];
-    double omega_k = rk_omega_ijk[0][2] + domega[2];
+    // update omega and s vector
+    double omega_ijk[3] = {rk_omega_ijk[0][0] + domega_ijk[0],rk_omega_ijk[0][1] + domega_ijk[1],rk_omega_ijk[0][2] + domega_ijk[2]};
+    *omega = sqrt(rebx_dot_prod(omega_ijk,omega_ijk));
+    *si = omega_ijk[0] / *omega;
+    *sj = omega_ijk[1] / *omega;
+    *sk = omega_ijk[2] / *omega;
 
-    *omega = sqrt(omega_i*omega_i + omega_j*omega_j + omega_k*omega_k);
-    *si = omega_i / *omega;
-    *sj = omega_j / *omega;
-    *sk = omega_k / *omega;
-
+    // calculate new i,j,k vectors, convert to xyz basis
     double ijk_ijk[3][3];
     double ijk_xyz[3][3];
-
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
-            ijk_ijk[i][j] = rk_ijk_ijk[0][i][j] + dijk[i][j];
+            ijk_ijk[i][j] = rk_ijk_ijk[0][i][j] + dijk_ijk[i][j];
         }
         rebx_ijk_to_xyz(ijk_ijk[i],ijk_xyz[i],rk_ijk_xyz[0]);
     }
-    
-    double ix_ = ijk_xyz[0][0];
-    double iy_ = ijk_xyz[0][1];
-    double iz_ = ijk_xyz[0][2];
-    double jx_ = ijk_xyz[1][0];
-    double jy_ = ijk_xyz[1][1];
-    double jz_ = ijk_xyz[1][2];
-    double kx_ = ijk_xyz[2][0];
-    double ky_ = ijk_xyz[2][1];
-    double kz_ = ijk_xyz[2][2];
 
     // re-normalize
-    double i_mag = sqrt(ix_*ix_ + iy_*iy_ + iz_*iz_);
-    double j_mag = sqrt(jx_*jx_ + jy_*jy_ + jz_*jz_);
-    double k_mag = sqrt(kx_*kx_ + ky_*ky_ + kz_*kz_);
+    double i_mag = sqrt(rebx_dot_prod(ijk_xyz[0],ijk_xyz[0]));
+    double j_mag = sqrt(rebx_dot_prod(ijk_xyz[1],ijk_xyz[1]));
+    double k_mag = sqrt(rebx_dot_prod(ijk_xyz[2],ijk_xyz[2]));
 
-    *ix = ix_ / i_mag;
-    *iy = iy_ / i_mag;
-    *iz = iz_ / i_mag;
-    *jx = jx_ / j_mag;
-    *jy = jy_ / j_mag;
-    *jz = jz_ / j_mag;
-    *kx = kx_ / k_mag;
-    *ky = ky_ / k_mag;
-    *kz = kz_ / k_mag;
+    *ix = ijk_xyz[0][0] / i_mag;
+    *iy = ijk_xyz[0][1] / i_mag;
+    *iz = ijk_xyz[0][2] / i_mag;
+    *jx = ijk_xyz[1][0] / j_mag;
+    *jy = ijk_xyz[1][1] / j_mag;
+    *jz = ijk_xyz[1][2] / j_mag;
+    *kx = ijk_xyz[2][0] / k_mag;
+    *ky = ijk_xyz[2][1] / k_mag;
+    *kz = ijk_xyz[2][2] / k_mag;
 }
 
 // runs checks on parameters. Returns 1 if error, 0 otherwise.
