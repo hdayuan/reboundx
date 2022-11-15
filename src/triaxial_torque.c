@@ -253,6 +253,8 @@ static void rebx_calc_triax_torque(struct reb_simulation* const sim, int index, 
         M_ijk[0] += prefac*(I_ijk[2]-I_ijk[1])*r_dot_j*r_dot_k;
         M_ijk[1] += prefac*(I_ijk[0]-I_ijk[2])*r_dot_k*r_dot_i;
         M_ijk[2] += prefac*(I_ijk[1]-I_ijk[0])*r_dot_i*r_dot_j;
+
+        // printf("triax: %.10e\n", M_ijk[2]);  // DEBUG
     }
 }
 
@@ -317,6 +319,8 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     M_ijk[0] += prefac*rho_cross_r[0];
     M_ijk[1] += prefac*rho_cross_r[1];
     M_ijk[2] += prefac*rho_cross_r[2];
+
+    // printf("tide: %.10e\n", prefac*rho_cross_r[2]);  // DEBUG
 }
 
 /* updates spin vector, omega, and ijk in lockstep using 4th order Runge Kutta.
@@ -390,31 +394,6 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torq
         rebx_dijk_dt_acc(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts[i],dt);
         // rebx_dijk_dt(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts[i]);
     }
-    
-    /****************************************************************************************/
-    /****************************************************************************************/
-    // // First Runge-Kutta calculations
-    // rebx_calc_triax_torque(sim,index,M_ijk[0],I_ijk,rk_ijk_xyz[0],0.0);
-    // rebx_domega_dt(rk_omega_ijk[0],rk_M_ijk[0],I_ijk,rk_domega_dts[0]);
-    // rebx_dijk_dt(rk_ijk_ijk[0],rk_omega_ijk[0],rk_dijk_dts[0]);
-
-    // // Pre-second RK calcs
-    // for (int j=0; j < 3; j++) {
-    //     rk_omega_ijk[1][j] = rk_domega_dts[0][j]*dt*0.5 + rk_omega_ijk[0][j];
-    //     for (int k=0; k < 3; k++) {
-    //         rk_ijk_ijk[1][j][k] = rk_dijk_dts[0][j][k]*dt*0.5 + rk_ijk_ijk[0][j][k];
-    //     }
-    //     rebx_ijk_to_xyz(rk_ijk_ijk[1][j],rk_ijk_xyz[1][j],rk_ijk_xyz[0]);
-    // }
-
-    // // Second RK calcs
-    // rebx_calc_triax_torque(sim,index,M_ijk[1],I_ijk,rk_ijk_xyz[1],0.5*dt);
-    // rebx_domega_dt(rk_omega_ijk[1],rk_M_ijk[1],I_ijk,rk_domega_dts[1]);
-    // rebx_dijk_dt(rk_ijk_ijk[1],rk_omega_ijk[1],rk_dijk_dts[1]);
-
-    // Continue editing here
-    /****************************************************************************************/
-    /****************************************************************************************/
     
     // calculate domega, d{ijk}
     double domega[3];
