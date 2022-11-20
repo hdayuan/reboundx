@@ -75,7 +75,7 @@
  * tt_si (double)                  Yes         i component of spin unit vector
  * tt_sj (double)                  Yes         j component of spin unit vector
  * tt_sk (double)                  Yes         k component of spin unit vector
- * tt_Q  (double)                  Yes         tidal Q factor
+ * tt_tidal_dt  (double)           Yes         constant tidal timelag
  * tt_k2 (double)                  Yes         2nd degree Love number
  * tt_R  (double)                  Yes         mean radius
  * ============================ =========== ==================================================================
@@ -256,7 +256,7 @@ static void rebx_calc_triax_torque(struct reb_simulation* const sim, int index, 
 
 // calculates the tidal torque from host star on the 'index'th particle
 // assumes host star is at index 0
-static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, double M_ijk[3], double omega_ijk[3], double ijk_xyz[3][3], const double Q, const double k2, 
+static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, double M_ijk[3], double omega_ijk[3], double ijk_xyz[3][3], const double tidal_dt, const double k2, 
     const double R, double dt, const double sim_dt){
 
     // if primary, ignore
@@ -264,50 +264,44 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
         return;
     }
 
-    double theta_lag = -1/(2*Q);
     struct reb_particle* p = &sim->particles[index];
     struct reb_particle* primary = &sim->particles[0];
-    double lag_p_xyz[3];
-    double lag_primary_xyz[3];
+    struct reb_orbit o = reb_tools_particle_to_orbit(sim->G, *p, *primary);
+    double omega = sqrt(rebx_dot_prod(omega_ijk,omega_ijk));
+    double s_ijk[3] = {omega_ijk[0]/omega,omega_ijk[1]/omega,omega_ijk[2]/omega};
+    double theta_lag = 2.0*tidal_dt*(omega-o.n);
+    double sin_theta = sin(theta_lag);
+    double cos_theta = cos(theta_lag);
+    double r_cross_s[3];
     double p_xyz[3];
     double primary_xyz[3];
-
     double r_xyz[3];
     double r_ijk[3];
     double r;
-    double rho_xyz[3];
     double rho_ijk[3];
     double rho;
     double prefac;
     double rho_cross_r[3];
 
-    struct reb_orbit o = reb_tools_particle_to_orbit(sim->G, *p, *primary);
-    double extra_dt = theta_lag / o.n; // for calculating lagged position of primary below with interpolation
-
-    rebx_interpolate_xyz_acc(sim->G,p,primary,lag_p_xyz,dt-sim_dt+extra_dt);
-    rebx_interpolate_xyz_acc(sim->G,primary,primary,lag_primary_xyz,dt-sim_dt+extra_dt);
     rebx_interpolate_xyz_acc(sim->G,p,primary,p_xyz,dt-sim_dt);
     rebx_interpolate_xyz_acc(sim->G,primary,primary,primary_xyz,dt-sim_dt);
 
-    r_xyz[0] = p_xyz[0] - primary_xyz[0];
-    r_xyz[1] = p_xyz[1] - primary_xyz[1];
-    r_xyz[2] = p_xyz[2] - primary_xyz[2];
+    r_xyz[0] = primary_xyz[0] - p_xyz[0];
+    r_xyz[1] = primary_xyz[1] - p_xyz[1];
+    r_xyz[2] = primary_xyz[2] - p_xyz[2];
 
     r = sqrt(rebx_dot_prod(r_xyz,r_xyz));
 
-    rho_xyz[0] = lag_p_xyz[0] - lag_primary_xyz[0];
-    rho_xyz[1] = lag_p_xyz[1] - lag_primary_xyz[1];
-    rho_xyz[2] = lag_p_xyz[2] - lag_primary_xyz[2];
-
-    rho = sqrt(rebx_dot_prod(rho_xyz,rho_xyz));
-    
     r_ijk[0] = rebx_dot_prod(r_xyz,ijk_xyz[0]);
     r_ijk[1] = rebx_dot_prod(r_xyz,ijk_xyz[1]);
     r_ijk[2] = rebx_dot_prod(r_xyz,ijk_xyz[2]);
 
-    rho_ijk[0] = rebx_dot_prod(rho_xyz,ijk_xyz[0]);
-    rho_ijk[1] = rebx_dot_prod(rho_xyz,ijk_xyz[1]);
-    rho_ijk[2] = rebx_dot_prod(rho_xyz,ijk_xyz[2]);
+    rebx_cross_prod(r_ijk,s_ijk,r_cross_s);
+
+    rho_ijk[0] = cos_theta*r_ijk[0] + sin_theta*r_cross_s[0];
+    rho_ijk[1] = cos_theta*r_ijk[1] + sin_theta*r_cross_s[1];
+    rho_ijk[2] = cos_theta*r_ijk[2] + sin_theta*r_cross_s[2];
+    rho = sqrt(rebx_dot_prod(rho_ijk,rho_ijk));
 
     prefac = 3*k2*sim->G*primary->m*primary->m*pow(R,5)*rebx_dot_prod(r_ijk,rho_ijk) / (pow(rho,2)*pow(r,8));
 
@@ -320,10 +314,10 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
 }
 
 /* updates spin vector, omega, and ijk in lockstep using 4th order Runge Kutta.
-If calc_torque_bool = 0, torque NOT calculated, otherwise torque calculated */
+If calc_torque_bool = 0, torques (including both triaxial and tidal) NOT calculated, otherwise torques calculated */
 static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torque_bool, int index, double* const ix, double* const iy, double* const iz, 
     double* const jx, double* const jy, double* const jz, double* const kx, double* const ky, double* const kz, double* const si, double* const sj,
-    double* const sk, double* const omega, const double Ii, const double Ij, const double Ik, const double Q, const double k2, const double R, const double dt){
+    double* const sk, double* const omega, const double Ii, const double Ij, const double Ik, const double tidal_dt, const double k2, const double R, const double dt){
 
     // Array for principal moments
     const double I_ijk[3] = {Ii,Ij,Ik};
@@ -382,7 +376,7 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torq
         // Calcs
         if (calc_torque_bool != 0) {
             rebx_calc_triax_torque(sim,index,rk_M_ijk[i],I_ijk,rk_ijk_xyz[i],rk_dts[i],dt); // [DEBUG]
-            rebx_calc_tidal_torque(sim,index,rk_M_ijk[i],rk_omega_ijk[i],rk_ijk_xyz[i],Q,k2,R,rk_dts[i],dt);
+            rebx_calc_tidal_torque(sim,index,rk_M_ijk[i],rk_omega_ijk[i],rk_ijk_xyz[i],tidal_dt,k2,R,rk_dts[i],dt);
         }
         rebx_domega_dt(rk_omega_ijk[i],rk_M_ijk[i],I_ijk,rk_domega_dts_ijk[i]);
 
@@ -543,8 +537,8 @@ void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator
         if (sk == NULL) {
             continue;
         }
-        const double* const Q = rebx_get_param(sim->extras, p->ap, "tt_Q");
-        if (Q == NULL) {
+        const double* const tidal_dt = rebx_get_param(sim->extras, p->ap, "tt_tidal_dt");
+        if (tidal_dt == NULL) {
             continue;
         }
         const double* const k2 = rebx_get_param(sim->extras, p->ap, "tt_k2");
@@ -565,6 +559,6 @@ void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator
             // rebx_update_spin_ijk(sim,0,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,dt); // [DEBUG]
         }
         
-        rebx_update_spin_ijk(sim,1,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,*Q,*k2,*R,dt);
+        rebx_update_spin_ijk(sim,1,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,*tidal_dt,*k2,*R,dt);
     }
 }
