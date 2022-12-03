@@ -135,7 +135,7 @@ static void rebx_interpolate_xyz(struct reb_particle* p, double xyz[3], double d
 
 // interpolate position assuming orbit around stationary primary
 // orbit assumed to be near circular??
-// *** when calling with p = primary, dtheta not used, make sure to incorporate additional time offset into dt ***
+        // *** when calling with p = primary, dtheta not used, make sure to incorporate additional time offset into dt ***
 static void rebx_interpolate_xyz_acc(double sim_G, struct reb_particle* p, struct reb_particle* primary, double xyz[3], double dt){
     
     // dtheta not used if p == primary
@@ -270,6 +270,18 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     double omega = sqrt(rebx_dot_prod(omega_ijk,omega_ijk));
     double s_ijk[3] = {omega_ijk[0]/omega,omega_ijk[1]/omega,omega_ijk[2]/omega};
     double theta_lag = 2.0*tidal_dt*(omega-o.n);
+    double max_theta_lag = PI / 2;
+    if (theta_lag == 0.0) {
+        return;
+    }
+    // if larger than max_theta_lag, reset to max_theta_lag
+    if (theta_lag > max_theta_lag) {
+        theta_lag = max_theta_lag;
+    }
+    if (theta_lag < -max_theta_lag) {
+        theta_lag = -max_theta_lag;
+    }
+    // printf("theta = %.5e\n", theta_lag); // [DEBUG]
     double sin_theta = sin(theta_lag);
     double cos_theta = cos(theta_lag);
     double r_cross_s[3];
@@ -298,19 +310,31 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
 
     rebx_cross_prod(r_ijk,s_ijk,r_cross_s);
 
-    rho_ijk[0] = cos_theta*r_ijk[0] + sin_theta*r_cross_s[0];
-    rho_ijk[1] = cos_theta*r_ijk[1] + sin_theta*r_cross_s[1];
-    rho_ijk[2] = cos_theta*r_ijk[2] + sin_theta*r_cross_s[2];
+    rho_ijk[0] = cos_theta*r_ijk[0] - sin_theta*r_cross_s[0];
+    rho_ijk[1] = cos_theta*r_ijk[1] - sin_theta*r_cross_s[1];
+    rho_ijk[2] = cos_theta*r_ijk[2] - sin_theta*r_cross_s[2];
     rho = sqrt(rebx_dot_prod(rho_ijk,rho_ijk));
 
     prefac = 3*k2*sim->G*primary->m*primary->m*pow(R,5)*rebx_dot_prod(r_ijk,rho_ijk) / (pow(rho,2)*pow(r,8));
+    // if (theta_lag > 0.0) {
+    //     prefac = -3*k2*sim->G*primary->m*primary->m*pow(R,5)*rebx_dot_prod(r_ijk,rho_ijk) / (pow(rho,2)*pow(r,8));
+    // }
+    // else {
+    //     prefac = 3*k2*sim->G*primary->m*primary->m*pow(R,5)*rebx_dot_prod(r_ijk,rho_ijk) / (pow(rho,2)*pow(r,8));
+    // }
+    
+    // try different sign for prefac above [DEBUG]
 
     rebx_cross_prod(rho_ijk,r_ijk,rho_cross_r);
     M_ijk[0] += prefac*rho_cross_r[0];
     M_ijk[1] += prefac*rho_cross_r[1];
     M_ijk[2] += prefac*rho_cross_r[2];
 
-    // printf("tide: %.10e\n", prefac*rho_cross_r[2]);  // DEBUG
+    // if (prefac*rho_cross_r[2] != 0.0) {
+    //     printf("omega = %.15e\n", omega);
+    //     printf("n = %.15e\n", o.n);
+    //     printf("tide: %.15e\n", prefac*rho_cross_r[2]);  // DEBUG
+    // }
 }
 
 /* updates spin vector, omega, and ijk in lockstep using 4th order Runge Kutta.
