@@ -269,18 +269,17 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     struct reb_orbit o = reb_tools_particle_to_orbit(sim->G, *p, *primary);
     double omega = sqrt(rebx_dot_prod(omega_ijk,omega_ijk));
     double s_ijk[3] = {omega_ijk[0]/omega,omega_ijk[1]/omega,omega_ijk[2]/omega};
-    double theta_lag = 2.0*tidal_dt*(omega-o.n);
+    double theta_lag = tidal_dt*(omega-o.n);
     double max_theta_lag = PI / 2;
-    if (theta_lag == 0.0) {
-        return;
-    }
-    // if larger than max_theta_lag, reset to max_theta_lag
+
+    // if larger than max_theta_lag, reset to max_theta_lag and for negative case too
     if (theta_lag > max_theta_lag) {
         theta_lag = max_theta_lag;
     }
     if (theta_lag < -max_theta_lag) {
         theta_lag = -max_theta_lag;
     }
+
     // printf("theta = %.5e\n", theta_lag); // [DEBUG]
     double sin_theta = sin(theta_lag);
     double cos_theta = cos(theta_lag);
@@ -301,13 +300,11 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     r_xyz[0] = primary_xyz[0] - p_xyz[0];
     r_xyz[1] = primary_xyz[1] - p_xyz[1];
     r_xyz[2] = primary_xyz[2] - p_xyz[2];
-
     r = sqrt(rebx_dot_prod(r_xyz,r_xyz));
 
     r_ijk[0] = rebx_dot_prod(r_xyz,ijk_xyz[0]);
     r_ijk[1] = rebx_dot_prod(r_xyz,ijk_xyz[1]);
     r_ijk[2] = rebx_dot_prod(r_xyz,ijk_xyz[2]);
-
     rebx_cross_prod(r_ijk,s_ijk,r_cross_s);
 
     rho_ijk[0] = cos_theta*r_ijk[0] - sin_theta*r_cross_s[0];
@@ -316,14 +313,6 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     rho = sqrt(rebx_dot_prod(rho_ijk,rho_ijk));
 
     prefac = 3*k2*sim->G*primary->m*primary->m*pow(R,5)*rebx_dot_prod(r_ijk,rho_ijk) / (pow(rho,2)*pow(r,8));
-    // if (theta_lag > 0.0) {
-    //     prefac = -3*k2*sim->G*primary->m*primary->m*pow(R,5)*rebx_dot_prod(r_ijk,rho_ijk) / (pow(rho,2)*pow(r,8));
-    // }
-    // else {
-    //     prefac = 3*k2*sim->G*primary->m*primary->m*pow(R,5)*rebx_dot_prod(r_ijk,rho_ijk) / (pow(rho,2)*pow(r,8));
-    // }
-    
-    // try different sign for prefac above [DEBUG]
 
     rebx_cross_prod(rho_ijk,r_ijk,rho_cross_r);
     M_ijk[0] += prefac*rho_cross_r[0];
