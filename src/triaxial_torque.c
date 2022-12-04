@@ -280,6 +280,8 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
         theta_lag = -max_theta_lag;
     }
 
+    // printf("theta_lag = %.15e\n", theta_lag);
+
     // printf("theta = %.5e\n", theta_lag); // [DEBUG]
     double sin_theta = sin(theta_lag);
     double cos_theta = cos(theta_lag);
