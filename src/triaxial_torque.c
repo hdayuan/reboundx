@@ -126,6 +126,13 @@ static void rebx_ijk_to_xyz(double ijk[3], double xyz[3], double ijk_xyz[3][3]){
     }
 }
 
+// convert vector xyz to ijk (same vector in ijk basis), given ijk_xyz
+static void rebx_xyz_to_ijk(double xyz[3], double ijk[3], double ijk_xyz[3][3]){
+    for (int i=0; i<3; i++) {
+        ijk[i] = rebx_dot_prod(xyz,ijk_xyz[i]);
+    }
+}
+
 // linearly interpolates position of particle p at time dt
 static void rebx_interpolate_xyz(struct reb_particle* p, double xyz[3], double dt){
     xyz[0] = p->x + (dt*p->vx);
@@ -267,26 +274,11 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     struct reb_particle* p = &sim->particles[index];
     struct reb_particle* primary = &sim->particles[0];
     struct reb_orbit o = reb_tools_particle_to_orbit(sim->G, *p, *primary);
-    double omega = sqrt(rebx_dot_prod(omega_ijk,omega_ijk));
-    double s_ijk[3] = {omega_ijk[0]/omega,omega_ijk[1]/omega,omega_ijk[2]/omega};
-    double theta_lag = tidal_dt*(omega-o.n);
-    double max_theta_lag = PI / 4;
-
-    // if larger than max_theta_lag, reset to max_theta_lag and for negative case too
-    if (theta_lag > max_theta_lag) {
-        theta_lag = max_theta_lag;
-    }
-    if (theta_lag < -max_theta_lag) {
-        theta_lag = -max_theta_lag;
-    }
-
-    // printf("theta_lag = %.15e\n", theta_lag);
-
-    // printf("theta = %.5e\n", theta_lag); // [DEBUG]
-    double sin_theta = sin(theta_lag);
-    double cos_theta = cos(theta_lag);
-    double r_cross_s[3];
+ 
+    double orbit_normal_ijk[3];
     double p_xyz[3];
+    double pv_xyz[3] = {p->vx,p->vy,p->vz};
+    double pv_ijk[3];
     double primary_xyz[3];
     double r_xyz[3];
     double r_ijk[3];
@@ -294,24 +286,34 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     double rho_ijk[3];
     double rho;
     double prefac;
-    double rho_cross_r[3];
+    double rho_cross_r_ijk[3];
+    double norm_cross_r_ijk[3];
+    double omega_cross_r_ijk[3];
 
     rebx_interpolate_xyz_acc(sim->G,p,primary,p_xyz,dt-sim_dt);
     rebx_interpolate_xyz_acc(sim->G,primary,primary,primary_xyz,dt-sim_dt);
 
+    // calculate r vector
     r_xyz[0] = primary_xyz[0] - p_xyz[0];
     r_xyz[1] = primary_xyz[1] - p_xyz[1];
     r_xyz[2] = primary_xyz[2] - p_xyz[2];
     r = sqrt(rebx_dot_prod(r_xyz,r_xyz));
+    rebx_xyz_to_ijk(r_xyz,r_ijk,ijk_xyz);
+    
+    // calculate orbit normal vector by v cross r
+    rebx_xyz_to_ijk(pv_xyz,pv_ijk,ijk_xyz);
+    rebx_cross_prod(pv_ijk,r_ijk,orbit_normal_ijk);
+    double orbit_normal_norm = sqrt(rebx_dot_prod(orbit_normal_ijk,orbit_normal_ijk));
+    orbit_normal_ijk[0] /= orbit_normal_norm;
+    orbit_normal_ijk[1] /= orbit_normal_norm;
+    orbit_normal_ijk[2] /= orbit_normal_norm;
 
-    r_ijk[0] = rebx_dot_prod(r_xyz,ijk_xyz[0]);
-    r_ijk[1] = rebx_dot_prod(r_xyz,ijk_xyz[1]);
-    r_ijk[2] = rebx_dot_prod(r_xyz,ijk_xyz[2]);
-    rebx_cross_prod(r_ijk,s_ijk,r_cross_s);
-
-    rho_ijk[0] = cos_theta*r_ijk[0] - sin_theta*r_cross_s[0];
-    rho_ijk[1] = cos_theta*r_ijk[1] - sin_theta*r_cross_s[1];
-    rho_ijk[2] = cos_theta*r_ijk[2] - sin_theta*r_cross_s[2];
+    // calculate rho_ijk
+    rebx_cross_prod(orbit_normal_ijk,r_ijk,norm_cross_r_ijk);
+    rebx_cross_prod(omega_ijk,r_ijk,omega_cross_r_ijk);
+    rho_ijk[0] = r_ijk[0] + tidal_dt*(omega_cross_r_ijk[0]-o.n*norm_cross_r_ijk[0]);
+    rho_ijk[1] = r_ijk[1] + tidal_dt*(omega_cross_r_ijk[1]-o.n*norm_cross_r_ijk[1]);
+    rho_ijk[2] = r_ijk[2] + tidal_dt*(omega_cross_r_ijk[2]-o.n*norm_cross_r_ijk[2]);
     rho = sqrt(rebx_dot_prod(rho_ijk,rho_ijk));
 
     // print components of r and rho
