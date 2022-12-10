@@ -270,7 +270,7 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     double omega = sqrt(rebx_dot_prod(omega_ijk,omega_ijk));
     double s_ijk[3] = {omega_ijk[0]/omega,omega_ijk[1]/omega,omega_ijk[2]/omega};
     double theta_lag = tidal_dt*(omega-o.n);
-    double max_theta_lag = PI / 2;
+    double max_theta_lag = PI / 4;
 
     // if larger than max_theta_lag, reset to max_theta_lag and for negative case too
     if (theta_lag > max_theta_lag) {
@@ -314,6 +314,11 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     rho_ijk[2] = cos_theta*r_ijk[2] - sin_theta*r_cross_s[2];
     rho = sqrt(rebx_dot_prod(rho_ijk,rho_ijk));
 
+    // print components of r and rho
+    // printf("xyz: %.5e, %.5e, %.5e\n", p->x,p->y,p->z);
+    // printf("r: %.5e, %.5e, %.5e\n", r_ijk[0], r_ijk[1], r_ijk[2]);
+    // printf("rho: %.5e, %.5e, %.5e\n", rho_ijk[0], rho_ijk[1], rho_ijk[2]);
+
     prefac = 3*k2*sim->G*primary->m*primary->m*pow(R,5)*rebx_dot_prod(r_ijk,rho_ijk) / (pow(rho,2)*pow(r,8));
 
     rebx_cross_prod(rho_ijk,r_ijk,rho_cross_r);
@@ -324,7 +329,7 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     // if (prefac*rho_cross_r[2] != 0.0) {
     //     printf("omega = %.15e\n", omega);
     //     printf("n = %.15e\n", o.n);
-    //     printf("tide: %.15e\n", prefac*rho_cross_r[2]);  // DEBUG
+    // printf("tide: %.15e, %.15e, %.15e\n", prefac*rho_cross_r[0],prefac*rho_cross_r[1],prefac*rho_cross_r[2]);  // DEBUG
     // }
 }
 
@@ -480,6 +485,9 @@ static int rebx_validate_params(struct reb_simulation* const sim, double* const 
         reb_error(sim, "REBOUNDx Error: triaxial_torque: The cross-product of vectors i and j must equal vector k. \n");
         return 1;
     }
+
+    // else
+    return 0;
 }
 
 void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator* const triaxial_torque, const double dt){
@@ -568,12 +576,11 @@ void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator
         // check validity of parameters if first timestep
         if (sim->t <= dt){
             if (rebx_validate_params(sim,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk) == 1) {
+                printf("REBOUNDx ERROR \n");
                 return;
             }
-            // extra timestep with no torque
-            // rebx_update_spin_ijk(sim,0,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,dt); // [DEBUG]
         }
-        
+        // printf("time: %.5e\n", sim->t);
         rebx_update_spin_ijk(sim,1,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,*tidal_dt,*k2,*R,dt);
     }
 }
