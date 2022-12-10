@@ -314,6 +314,7 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     rho_ijk[0] = r_ijk[0] + tidal_dt*(omega_cross_r_ijk[0]-o.n*norm_cross_r_ijk[0]);
     rho_ijk[1] = r_ijk[1] + tidal_dt*(omega_cross_r_ijk[1]-o.n*norm_cross_r_ijk[1]);
     rho_ijk[2] = r_ijk[2] + tidal_dt*(omega_cross_r_ijk[2]-o.n*norm_cross_r_ijk[2]);
+
     rho = sqrt(rebx_dot_prod(rho_ijk,rho_ijk));
 
     // print components of r and rho
@@ -323,10 +324,10 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
 
     prefac = 3*k2*sim->G*primary->m*primary->m*pow(R,5)*rebx_dot_prod(r_ijk,rho_ijk) / (pow(rho,2)*pow(r,8));
 
-    rebx_cross_prod(rho_ijk,r_ijk,rho_cross_r);
-    M_ijk[0] += prefac*rho_cross_r[0];
-    M_ijk[1] += prefac*rho_cross_r[1];
-    M_ijk[2] += prefac*rho_cross_r[2];
+    rebx_cross_prod(rho_ijk,r_ijk,rho_cross_r_ijk);
+    M_ijk[0] += prefac*rho_cross_r_ijk[0];
+    M_ijk[1] += prefac*rho_cross_r_ijk[1];
+    M_ijk[2] += prefac*rho_cross_r_ijk[2];
 
     // if (prefac*rho_cross_r[2] != 0.0) {
     //     printf("omega = %.15e\n", omega);
