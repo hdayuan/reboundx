@@ -243,9 +243,9 @@ static void rebx_calc_triax_torque(struct reb_simulation* const sim, int index, 
         torquer = &sim->particles[i];
         // rebx_interpolate_xyz(torquer,torquer_xyz,dt-sim_dt);
         rebx_interpolate_xyz_acc(sim->G, torquer, &sim->particles[0],torquer_xyz,dt-sim_dt);
-        r_xyz[0] = p_xyz[0] - torquer_xyz[0];
-        r_xyz[1] = p_xyz[1] - torquer_xyz[1];
-        r_xyz[2] = p_xyz[2] - torquer_xyz[2];
+        r_xyz[0] = torquer_xyz[0] - p_xyz[0];
+        r_xyz[1] = torquer_xyz[1] - p_xyz[1];
+        r_xyz[2] = torquer_xyz[2] - p_xyz[2];
         r = sqrt(rebx_dot_prod(r_xyz, r_xyz));
         prefac = 3 * sim->G * torquer->m / pow(r,5);
 
