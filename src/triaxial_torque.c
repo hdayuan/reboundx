@@ -338,7 +338,7 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
 
 /* updates spin vector, omega, and ijk in lockstep using 4th order Runge Kutta.
 If calc_torque_bool = 0, torques (including both triaxial and tidal) NOT calculated, otherwise torques calculated */
-static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torque_bool, int index, double* const ix, double* const iy, double* const iz, 
+static void rebx_update_spin_ijk(struct reb_simulation* const sim, int index, double* const ix, double* const iy, double* const iz, 
     double* const jx, double* const jy, double* const jz, double* const kx, double* const ky, double* const kz, double* const si, double* const sj,
     double* const sk, double* const omega, const double Ii, const double Ij, const double Ik, const double tidal_dt, const double k2, const double R, const double dt){
 
@@ -397,10 +397,9 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int calc_torq
         }
 
         // Calcs
-        if (calc_torque_bool != 0) {
-            rebx_calc_triax_torque(sim,index,rk_M_ijk[i],I_ijk,rk_ijk_xyz[i],rk_dts[i],dt); // [DEBUG]
-            rebx_calc_tidal_torque(sim,index,rk_M_ijk[i],rk_omega_ijk[i],rk_ijk_xyz[i],tidal_dt,k2,R,rk_dts[i],dt);
-        }
+        rebx_calc_triax_torque(sim,index,rk_M_ijk[i],I_ijk,rk_ijk_xyz[i],rk_dts[i],dt); // [DEBUG]
+        rebx_calc_tidal_torque(sim,index,rk_M_ijk[i],rk_omega_ijk[i],rk_ijk_xyz[i],tidal_dt,k2,R,rk_dts[i],dt);
+
         rebx_domega_dt(rk_omega_ijk[i],rk_M_ijk[i],I_ijk,rk_domega_dts_ijk[i]);
 
         rebx_dijk_dt_acc(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts_ijk[i],dt);
@@ -584,6 +583,6 @@ void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator
             }
         }
         // printf("time: %.5e\n", sim->t);
-        rebx_update_spin_ijk(sim,1,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,*tidal_dt,*k2,*R,dt);
+        rebx_update_spin_ijk(sim,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,*tidal_dt,*k2,*R,dt);
     }
 }
