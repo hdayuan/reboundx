@@ -80,7 +80,7 @@
  * tt_R  (double)                  Yes         mean radius
  * ============================ =========== ==================================================================
  * 
- * Parameter reuqirements:
+ * Parameter requirements:
  * ============================
  * i, j, k, and s must be unit vectors (e.g. such that ix^2 + iy^2 + iz^2 = 1)
  * i cross j = k
