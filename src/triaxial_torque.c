@@ -187,37 +187,6 @@ static void rebx_dijk_dt(double ijk_ijk[3][3], double omega_ijk[3], double dijk_
     rebx_cross_prod(omega_ijk,ijk_ijk[2],dijk_dts_ijk[2]); // dk/dt
 }
 
-// computes time-derivative of vectors i,j,k (components in old ijk basis)
-static void rebx_dijk_dt_acc(double ijk_ijk[3][3], double omega_ijk[3], double dijk_dts_ijk[3][3], double sim_dt){
-    double omega = sqrt(omega_ijk[0]*omega_ijk[0] + omega_ijk[1]*omega_ijk[1] + omega_ijk[2]*omega_ijk[2]);
-    double s_ijk[3] = {omega_ijk[0]/omega, omega_ijk[1]/omega, omega_ijk[2]/omega};
-    double dtheta = omega*sim_dt;
-    double sin_dtheta = sin(dtheta);
-    double cos_dtheta = sqrt(1 - sin_dtheta*sin_dtheta);
-    double s_cross_i[3];
-    double s_cross_j[3];
-    double s_cross_k[3];
-
-    rebx_cross_prod(s_ijk,ijk_ijk[0],s_cross_i);
-    rebx_cross_prod(s_ijk,ijk_ijk[1],s_cross_j);
-    rebx_cross_prod(s_ijk,ijk_ijk[2],s_cross_k);
-    
-    // di/dt
-    dijk_dts_ijk[0][0] = (sin_dtheta*s_cross_i[0] - (1-cos_dtheta)*ijk_ijk[0][0])/sim_dt;
-    dijk_dts_ijk[0][1] = (sin_dtheta*s_cross_i[1] - (1-cos_dtheta)*ijk_ijk[0][1])/sim_dt;
-    dijk_dts_ijk[0][2] = (sin_dtheta*s_cross_i[2] - (1-cos_dtheta)*ijk_ijk[0][2])/sim_dt;
-
-    // dj/dt
-    dijk_dts_ijk[1][0] = (sin_dtheta*s_cross_j[0] - (1-cos_dtheta)*ijk_ijk[1][0])/sim_dt;
-    dijk_dts_ijk[1][1] = (sin_dtheta*s_cross_j[1] - (1-cos_dtheta)*ijk_ijk[1][1])/sim_dt;
-    dijk_dts_ijk[1][2] = (sin_dtheta*s_cross_j[2] - (1-cos_dtheta)*ijk_ijk[1][2])/sim_dt;
-
-    // dk/dt
-    dijk_dts_ijk[2][0] = (sin_dtheta*s_cross_k[0] - (1-cos_dtheta)*ijk_ijk[2][0])/sim_dt;
-    dijk_dts_ijk[2][1] = (sin_dtheta*s_cross_k[1] - (1-cos_dtheta)*ijk_ijk[2][1])/sim_dt;
-    dijk_dts_ijk[2][2] = (sin_dtheta*s_cross_k[2] - (1-cos_dtheta)*ijk_ijk[2][2])/sim_dt;
-}
-
 // calculates the triaxial torque from all other bodies on the 'index'th particle
 static void rebx_calc_triax_torque(struct reb_simulation* const sim, int index, double M_ijk[3], const double I_ijk[3], double ijk_xyz[3][3], double dt, const double sim_dt){
     
@@ -404,9 +373,7 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int index, do
         rebx_calc_tidal_torque(sim,index,rk_M_ijk[i],rk_omega_ijk[i],rk_ijk_xyz[i],tidal_dt,k2,R,rk_dts[i],dt);
 
         rebx_domega_dt(rk_omega_ijk[i],rk_M_ijk[i],I_ijk,rk_domega_dts_ijk[i]);
-
-        rebx_dijk_dt_acc(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts_ijk[i],dt);
-        // rebx_dijk_dt(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts_ijk[i]);
+        rebx_dijk_dt(rk_ijk_ijk[i],rk_omega_ijk[i],rk_dijk_dts_ijk[i]);
     }
     
     // calculate domega_ijk, d{ijk}
@@ -589,3 +556,36 @@ void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator
         rebx_update_spin_ijk(sim,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,*tidal_dt,*k2,*R,dt);
     }
 }
+
+/*
+// computes time-derivative of vectors i,j,k (components in old ijk basis)
+static void rebx_dijk_dt_acc(double ijk_ijk[3][3], double omega_ijk[3], double dijk_dts_ijk[3][3], double sim_dt){
+    double omega = sqrt(omega_ijk[0]*omega_ijk[0] + omega_ijk[1]*omega_ijk[1] + omega_ijk[2]*omega_ijk[2]);
+    double s_ijk[3] = {omega_ijk[0]/omega, omega_ijk[1]/omega, omega_ijk[2]/omega};
+    double dtheta = omega*sim_dt;
+    double sin_dtheta = sin(dtheta);
+    double cos_dtheta = sqrt(1 - sin_dtheta*sin_dtheta);
+    double s_cross_i[3];
+    double s_cross_j[3];
+    double s_cross_k[3];
+
+    rebx_cross_prod(s_ijk,ijk_ijk[0],s_cross_i);
+    rebx_cross_prod(s_ijk,ijk_ijk[1],s_cross_j);
+    rebx_cross_prod(s_ijk,ijk_ijk[2],s_cross_k);
+    
+    // di/dt
+    dijk_dts_ijk[0][0] = (sin_dtheta*s_cross_i[0] - (1-cos_dtheta)*ijk_ijk[0][0])/sim_dt;
+    dijk_dts_ijk[0][1] = (sin_dtheta*s_cross_i[1] - (1-cos_dtheta)*ijk_ijk[0][1])/sim_dt;
+    dijk_dts_ijk[0][2] = (sin_dtheta*s_cross_i[2] - (1-cos_dtheta)*ijk_ijk[0][2])/sim_dt;
+
+    // dj/dt
+    dijk_dts_ijk[1][0] = (sin_dtheta*s_cross_j[0] - (1-cos_dtheta)*ijk_ijk[1][0])/sim_dt;
+    dijk_dts_ijk[1][1] = (sin_dtheta*s_cross_j[1] - (1-cos_dtheta)*ijk_ijk[1][1])/sim_dt;
+    dijk_dts_ijk[1][2] = (sin_dtheta*s_cross_j[2] - (1-cos_dtheta)*ijk_ijk[1][2])/sim_dt;
+
+    // dk/dt
+    dijk_dts_ijk[2][0] = (sin_dtheta*s_cross_k[0] - (1-cos_dtheta)*ijk_ijk[2][0])/sim_dt;
+    dijk_dts_ijk[2][1] = (sin_dtheta*s_cross_k[1] - (1-cos_dtheta)*ijk_ijk[2][1])/sim_dt;
+    dijk_dts_ijk[2][2] = (sin_dtheta*s_cross_k[2] - (1-cos_dtheta)*ijk_ijk[2][2])/sim_dt;
+}
+*/
