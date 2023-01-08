@@ -190,6 +190,13 @@ static void rebx_dijk_dt(double ijk_ijk[3][3], double omega_ijk[3], double dijk_
 // calculates the triaxial torque from all other bodies on the 'index'th particle
 static void rebx_calc_triax_torque(struct reb_simulation* const sim, int index, double M_ijk[3], const double I_ijk[3], double ijk_xyz[3][3], double dt, const double sim_dt){
     
+    /*************BELOW FOR JUST TORQUE FROM HOST STAR**********/
+    // if primary, ignore
+    if (index == 0) {
+        return;
+    }
+    /*************ABOVE FOR JUST TORQUE FROM HOST STAR**********/
+
     struct reb_particle* p = &sim->particles[index];
     struct reb_particle* torquer;
     double p_xyz[3];
@@ -204,14 +211,14 @@ static void rebx_calc_triax_torque(struct reb_simulation* const sim, int index, 
     // rebx_interpolate_xyz(p,p_xyz,dt-sim_dt);
     rebx_interpolate_xyz_acc(sim->G, p, &sim->particles[0],p_xyz,dt-sim_dt);
 
-    /*************BELOW FOR NOT JUST TORQUE FROM HOST STAR**********/
+    /*************BELOW FOR TORQUE FROM ALL OTHER BODIES**********/
     // const int _N_real = sim->N - sim->N_var;
 	// for(int i=0; i<_N_real; i++){
     //     if (i == index) {
     //         continue;
     //     }
     //    torquer = &sim->particles[i];
-    /*************ABOVE FOR NOT JUST TORQUE FROM HOST STAR**********/
+    /*************ABOVE FOR TORQUE FROM ALL OTHER BODIES**********/
     torquer = &sim->particles[0];
     // rebx_interpolate_xyz(torquer,torquer_xyz,dt-sim_dt);
     rebx_interpolate_xyz_acc(sim->G, torquer, &sim->particles[0],torquer_xyz,dt-sim_dt);
