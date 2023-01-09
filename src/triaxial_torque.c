@@ -454,15 +454,31 @@ static int rebx_validate_params(struct reb_simulation* const sim, const double* 
     double i_cross_j_z = *ix**jy - *iy**jx;
 
     if (i_diff > tolerance || j_diff > tolerance || k_diff > tolerance || s_diff > tolerance) {
-        reb_error(sim, "REBOUNDx Error: triaxial_torque: Vectors i, j, k, and s must be unit vectors. \n");
+        reb_error(sim, "REBOUNDx Error: triaxial_torque: Vectors i, j, k, and s must be unit vectors.\n");
         return 1;
     }
     if (i_dot_j != 0 || i_dot_k != 0 || j_dot_k != 0) {
-        reb_error(sim, "REBOUNDx Error: triaxial_torque: Vectors i, j, and k must be mutually orthogonal. \n");
+        reb_error(sim, "REBOUNDx Error: triaxial_torque: Vectors i, j, and k must be mutually orthogonal.\n");
         return 1;
     }
     if (i_cross_j_x != *kx || i_cross_j_y != *ky || i_cross_j_z != *kz){
-        reb_error(sim, "REBOUNDx Error: triaxial_torque: The cross-product of vectors i and j must equal vector k. \n");
+        reb_error(sim, "REBOUNDx Error: triaxial_torque: The cross-product of vectors i and j must equal vector k.\n");
+        return 1;
+    }
+    if (*Ii < 0 || *Ij < 0 || *Ik < 0){
+        reb_error(sim, "REBOUNDx Error: triaxial_torque: Principal moments Ii, Ij, Ik must be >= 0.\n");
+        return 1;
+    } 
+    if (*omega < 0){
+        reb_error(sim, "REBOUNDx Error: triaxial_torque: Spin rate omega must be >= 0. Negative spin rates can be created by modifying the s unit vector accordingly.\n");
+        return 1;
+    }
+    if (*R < 0){
+        reb_error(sim, "REBOUNDx Error: triaxial_torque: The mean radius R must be >= 0.\n");
+        return 1;
+    }
+    if (*k2 < 0 || *k2 > 1.5){
+        reb_error(sim, "REBOUNDx Error: triaxial_torque: k2 must be >= 0 and <= 1.5.\n");
         return 1;
     }
 
