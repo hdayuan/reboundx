@@ -433,9 +433,10 @@ static void rebx_update_spin_ijk(struct reb_simulation* const sim, int index, do
 }
 
 // runs checks on parameters. Returns 1 if error, 0 otherwise.
-static int rebx_validate_params(struct reb_simulation* const sim, double* const ix, double* const iy, double* const iz, double* const jx, double* const jy,
-    double* const jz, double* const kx, double* const ky, double* const kz, double* const si,
-    double* const sj, double* const sk) {
+static int rebx_validate_params(struct reb_simulation* const sim, const double* const Ii, const double* const Ij,
+    const double* const Ik, double* const omega, double* const ix, double* const iy, double* const iz, double* const jx,
+    double* const jy, double* const jz, double* const kx, double* const ky, double* const kz, double* const si, double* const sj,
+    double* const sk, const double* const tidal_dt, const double* const k2, const double* const R) {
 
     double tolerance = 1.e-15;
 
@@ -475,86 +476,39 @@ void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator
 		struct reb_particle* const p = &sim->particles[i];
 
         // check required params
-        const double* const Ii = rebx_get_param(sim->extras, p->ap, "tt_Ii");
-        if (Ii == NULL) {
-            continue;
-        }
-        const double* const Ij = rebx_get_param(sim->extras, p->ap, "tt_Ij");
-        if (Ij == NULL) {
-            continue;
-        }
-        const double* const Ik = rebx_get_param(sim->extras, p->ap, "tt_Ik");
-        if (Ik == NULL) {
-            continue;
-        }
-        double* const omega = rebx_get_param(sim->extras, p->ap, "tt_omega");
-        if (omega == NULL) {
-            continue;
-        }
-        double* const ix = rebx_get_param(sim->extras, p->ap, "tt_ix");
-        if (ix == NULL) {
-            continue;
-        }
-        double* const iy = rebx_get_param(sim->extras, p->ap, "tt_iy");
-        if (iy == NULL) {
-            continue;
-        }
-        double* const iz = rebx_get_param(sim->extras, p->ap, "tt_iz");
-        if (iz == NULL) {
-            continue;
-        }
-        double* const jx = rebx_get_param(sim->extras, p->ap, "tt_jx");
-        if (jx == NULL) {
-            continue;
-        }
-        double* const jy = rebx_get_param(sim->extras, p->ap, "tt_jy");
-        if (jy == NULL) {
-            continue;
-        }
-        double* const jz = rebx_get_param(sim->extras, p->ap, "tt_jz");
-        if (jz == NULL) {
-            continue;
-        }
-        double* const kx = rebx_get_param(sim->extras, p->ap, "tt_kx");
-        if (kx == NULL) {
-            continue;
-        }
-        double* const ky = rebx_get_param(sim->extras, p->ap, "tt_ky");
-        if (ky == NULL) {
-            continue;
-        }
-        double* const kz = rebx_get_param(sim->extras, p->ap, "tt_kz");
-        if (kz == NULL) {
-            continue;
-        }
-        double* const si = rebx_get_param(sim->extras, p->ap, "tt_si");
-        if (si == NULL) {
-            continue;
-        }
-        double* const sj = rebx_get_param(sim->extras, p->ap, "tt_sj");
-        if (sj == NULL) {
-            continue;
-        }
-        double* const sk = rebx_get_param(sim->extras, p->ap, "tt_sk");
-        if (sk == NULL) {
-            continue;
-        }
-        const double* const tidal_dt = rebx_get_param(sim->extras, p->ap, "tt_tidal_dt");
-        if (tidal_dt == NULL) {
-            continue;
-        }
-        const double* const k2 = rebx_get_param(sim->extras, p->ap, "tt_k2");
-        if (k2 == NULL) {
-            continue;
-        }
+        // check one first in attempt to speed up computation time
         const double* const R = rebx_get_param(sim->extras, p->ap, "tt_R");
         if (R == NULL) {
+            continue;
+        }
+        
+        // then check the remaining parameters all together
+        const double* const Ii = rebx_get_param(sim->extras, p->ap, "tt_Ii");
+        const double* const Ij = rebx_get_param(sim->extras, p->ap, "tt_Ij");
+        const double* const Ik = rebx_get_param(sim->extras, p->ap, "tt_Ik");
+        double* const omega = rebx_get_param(sim->extras, p->ap, "tt_omega");
+        double* const ix = rebx_get_param(sim->extras, p->ap, "tt_ix");
+        double* const iy = rebx_get_param(sim->extras, p->ap, "tt_iy");
+        double* const iz = rebx_get_param(sim->extras, p->ap, "tt_iz");
+        double* const jx = rebx_get_param(sim->extras, p->ap, "tt_jx");
+        double* const jy = rebx_get_param(sim->extras, p->ap, "tt_jy");
+        double* const jz = rebx_get_param(sim->extras, p->ap, "tt_jz");
+        double* const kx = rebx_get_param(sim->extras, p->ap, "tt_kx");
+        double* const ky = rebx_get_param(sim->extras, p->ap, "tt_ky");
+        double* const kz = rebx_get_param(sim->extras, p->ap, "tt_kz");
+        double* const si = rebx_get_param(sim->extras, p->ap, "tt_si");
+        double* const sj = rebx_get_param(sim->extras, p->ap, "tt_sj");
+        double* const sk = rebx_get_param(sim->extras, p->ap, "tt_sk");
+        const double* const tidal_dt = rebx_get_param(sim->extras, p->ap, "tt_tidal_dt");
+        const double* const k2 = rebx_get_param(sim->extras, p->ap, "tt_k2");
+        if (Ii==NULL || Ij==NULL || Ik==NULL || omega==NULL || ix==NULL || iy==NULL || iz==NULL || jx==NULL || jy==NULL || jz==NULL 
+            || kx==NULL || ky==NULL || kz==NULL || si==NULL || sj==NULL || sk==NULL || tidal_dt==NULL || k2==NULL) {
             continue;
         }
 
         // check validity of parameters if first timestep
         if (sim->t <= dt){
-            if (rebx_validate_params(sim,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk) == 1) {
+            if (rebx_validate_params(sim,Ii,Ij,Ik,omega,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,tidal_dt,k2,R) == 1) {
                 printf("REBOUNDx ERROR \n");
                 return;
             }
