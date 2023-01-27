@@ -306,7 +306,7 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
     // check if tidal phase lag is larger than pi / 4
     double epsilon = acos(r_dot_rho/r/rho);
     if (fabs(epsilon) > (PI/4)) {
-        fprintf(stderr, "REBOUNDx WARNING: Tidal phase lag is greater than 45 degrees; tidal effects are no longer accurate.\n")
+        fprintf(stderr, "REBOUNDx WARNING: Tidal phase lag is greater than 45 degrees; tidal effects are no longer accurate.\n");
     }
     prefac = 3*k2*sim->G*primary->m*primary->m*pow(R,5)*r_dot_rho / (pow(rho,2)*pow(r,8));
 
@@ -531,13 +531,13 @@ void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator
 
         // check validity of parameters if first timestep
         if (sim->t <= dt){
-            if (rebx_validate_params(sim,i,Ii,Ij,Ik,omega,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,tidal_dt,k2,R) == 1) {
+            if (rebx_validate_params(sim,Ii,Ij,Ik,omega,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,tidal_dt,k2,R) == 1) {
                 printf("REBOUNDx ERROR \n");
                 return;
             }
         }
         // printf("time: %.5e\n", sim->t);
-        rebx_update_spin_ijk(sim,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,*tidal_dt,*k2,*R,dt);
+        rebx_update_spin_ijk(sim,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,*tidal_dt,*k2,*R,dt);
     }
 }
 
