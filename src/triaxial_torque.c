@@ -305,13 +305,13 @@ static void rebx_calc_tidal_torque(struct reb_simulation* const sim, int index, 
 
     // check if tidal phase lag is larger than pi / 4
     double epsilon = acos(r_dot_rho/r/rho);
-    if (fabs(epsilon) > (PI/50)) {
+    if (fabs(epsilon) > (PI/10)) {
         if (fabs(epsilon) > (PI/4)) {
             fprintf(stderr, "REBOUNDx WARNING: triaxial_torque: Tidal phase lag is greater than 45 degrees; tidal effects are no longer accurate.\n");
         }
-        // else {
-        //     fprintf(stderr, "REBOUNDx WARNING: triaxial_torque: Tidal phase lag is greater than 1/100 of a rotation; tidal effects may not be accurate.\n");
-        // }
+        else {
+            fprintf(stderr, "REBOUNDx WARNING: triaxial_torque: Tidal phase lag is greater than 1/20 of a rotation; tidal effects may not be accurate.\n");
+        }
     }
    
     prefac = 3*k2*sim->G*primary->m*primary->m*pow(R,5)*r_dot_rho / (pow(rho,2)*pow(r,8));
