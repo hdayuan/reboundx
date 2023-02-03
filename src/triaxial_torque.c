@@ -541,7 +541,10 @@ void rebx_triaxial_torque(struct reb_simulation* const sim, struct rebx_operator
                 return;
             }
         }
-        // printf("time: %.5e\n", sim->t);
+        // check if time step is larger than 1/20 spin period, and if so, throw a warning.
+        if (dt > ((2.0 * PI / *omega) / 20.0)) {
+            fprintf(stderr, "REBOUNDx WARNING: triaxial_torque: Timestep is larger than 1/20 of the spin period; integration may no longer be accurate.\n");
+        }
         rebx_update_spin_ijk(sim,i,ix,iy,iz,jx,jy,jz,kx,ky,kz,si,sj,sk,omega,*Ii,*Ij,*Ik,*tidal_dt,*k2,*R,dt);
     }
 }
