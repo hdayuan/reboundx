@@ -470,11 +470,11 @@ static int rebx_validate_params(struct reb_simulation* const sim, const double* 
         reb_error(sim, "REBOUNDx Error: triaxial_torque: Vectors i, j, k, and s must be unit vectors.\n");
         return 1;
     }
-    if (i_dot_j != 0 || i_dot_k != 0 || j_dot_k != 0) {
+    if (i_dot_j > tolerance || i_dot_k > tolerance || j_dot_k > tolerance) {
         reb_error(sim, "REBOUNDx Error: triaxial_torque: Vectors i, j, and k must be mutually orthogonal.\n");
         return 1;
     }
-    if (i_cross_j_x != *kx || i_cross_j_y != *ky || i_cross_j_z != *kz){
+    if (fabs(i_cross_j_x - *kx) > tolerance || fabs(i_cross_j_y - *ky) > tolerance || fabs(i_cross_j_z - *kz) > tolerance){
         reb_error(sim, "REBOUNDx Error: triaxial_torque: The cross-product of vectors i and j must equal vector k.\n");
         return 1;
     }
